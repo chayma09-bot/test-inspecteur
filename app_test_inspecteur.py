@@ -116,6 +116,7 @@ if st.session_state.page == "home":
             if user:
                 st.session_state.user = username
                 st.session_state.page = "accueil"
+                st.session_state.page_changed = True
                 st.experimental_rerun()
             else:
                 st.error("Identifiants incorrects")
@@ -210,3 +211,4 @@ elif st.session_state.page == "result":
     if st.button("Retour accueil"):
         st.session_state.page = "accueil"
         st.experimental_rerun()
+
