@@ -1,21 +1,26 @@
 import streamlit as st
 import sqlite3
+import pandas as pd
 
-# Base de données
 conn = sqlite3.connect("inspecteurs.db", check_same_thread=False)
 c = conn.cursor()
 
+# tables
 c.execute("""CREATE TABLE IF NOT EXISTS users(
 username TEXT,
-password TEXT)""")
+password TEXT,
+tests INTEGER DEFAULT 0
+)""")
 
 c.execute("""CREATE TABLE IF NOT EXISTS resultats(
 username TEXT,
-score INTEGER)""")
+score INTEGER
+)""")
 
 conn.commit()
 
-# Corrigé (utilisé seulement pour le calcul)
+MAX_TEST = 2
+
 correct_answers = {
 1:"Grave à suivre",2:"Grave à suivre",3:"Grave à suivre",4:"Grave à suivre",
 5:"Alerte",6:"Grave à suivre",7:"Alerte",8:"Grave à suivre",9:"Grave à suivre",10:"Alerte",
@@ -25,17 +30,9 @@ correct_answers = {
 25:"Alerte",26:"Grave à suivre",27:"Alerte",28:"Alerte",29:"Alerte",30:"Alerte"
 }
 
-questions = {
-1:"Fissure longitudinale de 0,4 mm sur 2 m",
-2:"Épaufrement localisé sans armature visible",
-3:"Armatures visibles oxydées",
-4:"Efflorescences sans corrosion",
-5:"Flèche excessive visible",
-}
-
-# Etat session
+# session state
 if "page" not in st.session_state:
-    st.session_state.page = "login"
+    st.session_state.page = "home"
 
 if "question" not in st.session_state:
     st.session_state.question = 1
@@ -43,36 +40,97 @@ if "question" not in st.session_state:
 if "answers" not in st.session_state:
     st.session_state.answers = {}
 
-# PAGE LOGIN
-if st.session_state.page == "login":
+# HOME
+if st.session_state.page == "home":
 
-    st.title("Connexion Inspecteur")
+    st.title("Test Inspecteur VIPP")
 
-    username = st.text_input("Identifiant")
-    password = st.text_input("Mot de passe", type="password")
+    menu = st.radio(
+        "Menu",
+        ["Connexion","Créer un compte","Admin"]
+    )
 
-    if st.button("Connexion"):
+    # CREATE ACCOUNT
+    if menu == "Créer un compte":
 
-        c.execute("SELECT * FROM users WHERE username=? AND password=?",(username,password))
-        data = c.fetchone()
+        username = st.text_input("Identifiant")
+        password = st.text_input("Mot de passe",type="password")
 
-        if data:
-            st.session_state.user = username
+        if st.button("Créer le compte"):
+
+            c.execute("INSERT INTO users(username,password) VALUES (?,?)",(username,password))
+            conn.commit()
+
+            st.success("Compte créé")
+
+    # LOGIN
+    if menu == "Connexion":
+
+        username = st.text_input("Identifiant")
+        password = st.text_input("Mot de passe",type="password")
+
+        if st.button("Se connecter"):
+
+            c.execute("SELECT * FROM users WHERE username=? AND password=?",(username,password))
+            user = c.fetchone()
+
+            if user:
+
+                st.session_state.user = username
+                st.session_state.page = "accueil"
+                st.rerun()
+
+            else:
+
+                st.error("Identifiants incorrects")
+
+    # ADMIN
+    if menu == "Admin":
+
+        password = st.text_input("Mot de passe admin",type="password")
+
+        if password == "admin123":
+
+            df = pd.read_sql_query("SELECT * FROM resultats",conn)
+
+            st.dataframe(df)
+
+# PAGE ACCUEIL INSPECTEUR
+elif st.session_state.page == "accueil":
+
+    st.title("Bienvenue Inspecteur")
+
+    username = st.session_state.user
+
+    c.execute("SELECT tests FROM users WHERE username=?",(username,))
+    tests = c.fetchone()[0]
+
+    st.write(f"Nombre de tests effectués : {tests}/2")
+
+    if tests >= MAX_TEST:
+
+        st.warning("Vous avez atteint la limite de tests")
+
+    else:
+
+        if st.button("Lancer le test"):
+
             st.session_state.page = "quiz"
+            st.session_state.question = 1
+            st.session_state.answers = {}
             st.rerun()
-        else:
-            st.error("Identifiants incorrects")
 
-# PAGE TEST
+    if st.button("Retour accueil"):
+
+        st.session_state.page = "home"
+        st.rerun()
+
+# QUIZ
 elif st.session_state.page == "quiz":
 
     q = st.session_state.question
 
     st.title(f"Question {q} / 30")
-
-    question_text = questions.get(q, f"Question {q}")
-
-    st.write(question_text)
 
     answer = st.radio(
         "Choisir la gravité",
@@ -84,20 +142,24 @@ elif st.session_state.page == "quiz":
 
     col1,col2 = st.columns(2)
 
-    if col1.button("Précédent") and q > 1:
-        st.session_state.question -= 1
-        st.rerun()
+    if q > 1:
+        if col1.button("Précédent"):
+            st.session_state.question -= 1
+            st.rerun()
 
     if col2.button("Suivant"):
 
         if q < 30:
-            st.session_state.question += 1
-            st.rerun()
-        else:
-            st.session_state.page = "result"
-            st.rerun()
 
-# PAGE RESULTAT
+            st.session_state.question += 1
+
+        else:
+
+            st.session_state.page = "result"
+
+        st.rerun()
+
+# RESULT
 elif st.session_state.page == "result":
 
     st.title("Résultat du test")
@@ -105,16 +167,30 @@ elif st.session_state.page == "result":
     score = 0
 
     for q in correct_answers:
+
         if st.session_state.answers.get(q) == correct_answers[q]:
+
             score += 1
 
-    st.subheader(f"Score : {score} / 30")
+    st.subheader(f"Score : {score}/30")
 
     if score >= 24:
-        st.success("Inspecteur apte à sortir en terrain")
-    else:
-        st.error("Inspecteur non apte – formation requise")
 
-    c.execute("INSERT INTO resultats(username,score) VALUES (?,?)",
-              (st.session_state.user,score))
+        st.success("Inspecteur apte terrain")
+
+    else:
+
+        st.error("Inspecteur non apte")
+
+    username = st.session_state.user
+
+    c.execute("INSERT INTO resultats(username,score) VALUES (?,?)",(username,score))
+
+    c.execute("UPDATE users SET tests = tests + 1 WHERE username=?",(username,))
+
     conn.commit()
+
+    if st.button("Retour accueil"):
+
+        st.session_state.page = "accueil"
+        st.rerun()
