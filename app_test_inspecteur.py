@@ -150,6 +150,7 @@ elif st.session_state.page == "accueil":
         st.stop()
 
 # --- PAGE QUIZ ---
+# --- PAGE QUIZ ---
 elif st.session_state.page == "quiz":
 
     q = st.session_state.question
@@ -167,20 +168,20 @@ elif st.session_state.page == "quiz":
     )
 
     col1, col2 = st.columns(2)
-    prev_clicked = col1.button("Précédent") if q > 1 else False
-    next_clicked = col2.button("Suivant")
 
-    if prev_clicked:
-        st.session_state.question -= 1
-        st.stop()
+    # --- Précédent ---
+    if col1.button("Précédent", key=f"prev_{q}"):
+        if st.session_state.question > 1:
+            st.session_state.question -= 1
+        st.stop()  # stoppe l'exécution pour forcer la mise à jour
 
-    if next_clicked:
-        if q < 30:
+    # --- Suivant ---
+    if col2.button("Suivant", key=f"next_{q}"):
+        if st.session_state.question < 30:
             st.session_state.question += 1
         else:
             st.session_state.page = "result"
         st.stop()
-
 # --- PAGE RESULTAT ---
 elif st.session_state.page == "result":
 
@@ -202,3 +203,4 @@ elif st.session_state.page == "result":
     if st.button("Retour accueil"):
         st.session_state.page = "accueil"
         st.stop()
+
