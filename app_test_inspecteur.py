@@ -1,102 +1,120 @@
 import streamlit as st
 import sqlite3
 
-# connexion base
+# Base de données
 conn = sqlite3.connect("inspecteurs.db", check_same_thread=False)
 c = conn.cursor()
 
-# table utilisateurs
-c.execute("""
-CREATE TABLE IF NOT EXISTS users(
-id INTEGER PRIMARY KEY AUTOINCREMENT,
+c.execute("""CREATE TABLE IF NOT EXISTS users(
 username TEXT,
-password TEXT
-)
-""")
+password TEXT)""")
 
-# table résultats
-c.execute("""
-CREATE TABLE IF NOT EXISTS resultats(
+c.execute("""CREATE TABLE IF NOT EXISTS resultats(
 username TEXT,
-score INTEGER
-)
-""")
+score INTEGER)""")
 
 conn.commit()
 
-# corrigé
+# Corrigé (utilisé seulement pour le calcul)
 correct_answers = {
-1:"B",2:"A",3:"B",4:"A",5:"C",6:"B",7:"C",8:"A",9:"B",10:"C",
-11:"A",12:"B",13:"C",14:"B",15:"C",16:"B",17:"C",18:"B",19:"B",20:"C",
-21:"B",22:"A",23:"B",24:"A",25:"C",26:"B",27:"C",28:"C",29:"C",30:"C"
+1:"Grave à suivre",2:"Grave à suivre",3:"Grave à suivre",4:"Grave à suivre",
+5:"Alerte",6:"Grave à suivre",7:"Alerte",8:"Grave à suivre",9:"Grave à suivre",10:"Alerte",
+11:"Grave à suivre",12:"Grave à suivre",13:"Alerte",14:"Grave à suivre",15:"Alerte",
+16:"Grave à suivre",17:"Alerte",18:"Grave à suivre",19:"Grave à suivre",20:"Alerte",
+21:"Grave à suivre",22:"Grave à suivre",23:"Grave à suivre",24:"Grave à suivre",
+25:"Alerte",26:"Grave à suivre",27:"Alerte",28:"Alerte",29:"Alerte",30:"Alerte"
 }
 
-st.title("Test Inspecteur VIPP")
+questions = {
+1:"Fissure longitudinale de 0,4 mm sur 2 m",
+2:"Épaufrement localisé sans armature visible",
+3:"Armatures visibles oxydées",
+4:"Efflorescences sans corrosion",
+5:"Flèche excessive visible",
+}
 
-menu = ["Connexion","Créer un compte"]
-choice = st.sidebar.selectbox("Menu", menu)
+# Etat session
+if "page" not in st.session_state:
+    st.session_state.page = "login"
 
-# ---------------- CREER COMPTE ----------------
+if "question" not in st.session_state:
+    st.session_state.question = 1
 
-if choice == "Créer un compte":
+if "answers" not in st.session_state:
+    st.session_state.answers = {}
 
-    st.subheader("Créer un compte inspecteur")
+# PAGE LOGIN
+if st.session_state.page == "login":
 
-    new_user = st.text_input("Identifiant")
-    new_password = st.text_input("Mot de passe", type="password")
-
-    if st.button("Créer le compte"):
-
-        c.execute("INSERT INTO users(username,password) VALUES (?,?)",(new_user,new_password))
-        conn.commit()
-
-        st.success("Compte créé avec succès")
-
-# ---------------- LOGIN ----------------
-
-if choice == "Connexion":
-
-    st.subheader("Connexion")
+    st.title("Connexion Inspecteur")
 
     username = st.text_input("Identifiant")
     password = st.text_input("Mot de passe", type="password")
 
-    if st.button("Se connecter"):
+    if st.button("Connexion"):
 
         c.execute("SELECT * FROM users WHERE username=? AND password=?",(username,password))
         data = c.fetchone()
 
         if data:
-
-            st.success("Connexion réussie")
-
-            answers = {}
-
-            for i in range(1,31):
-
-                answers[i] = st.radio(
-                    f"Question {i}",
-                    ["A","B","C"],
-                    key=i
-                )
-
-            if st.button("Valider le test"):
-
-                score = 0
-
-                for q in correct_answers:
-                    if answers[q] == correct_answers[q]:
-                        score += 1
-
-                st.subheader(f"Score : {score}/30")
-
-                if score >= 24:
-                    st.success("Apte à sortir en terrain")
-                else:
-                    st.error("Non apte – formation requise")
-
-                c.execute("INSERT INTO resultats(username,score) VALUES (?,?)",(username,score))
-                conn.commit()
-
+            st.session_state.user = username
+            st.session_state.page = "quiz"
+            st.rerun()
         else:
             st.error("Identifiants incorrects")
+
+# PAGE TEST
+elif st.session_state.page == "quiz":
+
+    q = st.session_state.question
+
+    st.title(f"Question {q} / 30")
+
+    question_text = questions.get(q, f"Question {q}")
+
+    st.write(question_text)
+
+    answer = st.radio(
+        "Choisir la gravité",
+        ["Grave à suivre","Alerte"],
+        key=q
+    )
+
+    st.session_state.answers[q] = answer
+
+    col1,col2 = st.columns(2)
+
+    if col1.button("Précédent") and q > 1:
+        st.session_state.question -= 1
+        st.rerun()
+
+    if col2.button("Suivant"):
+
+        if q < 30:
+            st.session_state.question += 1
+            st.rerun()
+        else:
+            st.session_state.page = "result"
+            st.rerun()
+
+# PAGE RESULTAT
+elif st.session_state.page == "result":
+
+    st.title("Résultat du test")
+
+    score = 0
+
+    for q in correct_answers:
+        if st.session_state.answers.get(q) == correct_answers[q]:
+            score += 1
+
+    st.subheader(f"Score : {score} / 30")
+
+    if score >= 24:
+        st.success("Inspecteur apte à sortir en terrain")
+    else:
+        st.error("Inspecteur non apte – formation requise")
+
+    c.execute("INSERT INTO resultats(username,score) VALUES (?,?)",
+              (st.session_state.user,score))
+    conn.commit()
