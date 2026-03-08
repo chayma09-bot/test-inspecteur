@@ -209,6 +209,7 @@ elif st.session_state.page == "result":
     conn.commit()
 
     if st.button("Retour accueil"):
-        st.session_state.page = "accueil"
-        st.experimental_rerun()
+    st.session_state.page = "accueil"
+    st.stop()
+
 
